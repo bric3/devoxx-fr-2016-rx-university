@@ -2,9 +2,13 @@ package com.github.devoxx.university;
 
 import org.junit.Test;
 import rx.Observable;
+import rx.Observer;
+import rx.Subscriber;
+import rx.schedulers.Schedulers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 public class SideEffectTest {
@@ -30,6 +34,18 @@ public class SideEffectTest {
                 .doOnNext(i -> result.add(i)) // explicite
                 .subscribe();
     }
+
+    @Test
+    public void should_do_good_side_effects3() {
+
+        // attention ! état partagé !
+        AtomicLong errors = new AtomicLong(0);
+
+        Observable.just(1, 2, 3)
+                .doOnError(ex -> errors.incrementAndGet())
+                .subscribe();
+    }
+
 
     @Test
     public void should_do_good_side_effects2() {
@@ -68,6 +84,44 @@ public class SideEffectTest {
                     return i;
                 })
                 .subscribe();
+    }
+
+    @Test
+    public void should_create() throws InterruptedException {
+
+        Observable.defer(() -> Observable.just("TOTO" + Thread.currentThread().getName()));
+
+        Observable.empty()
+                .first()
+                .subscribeOn(Schedulers.io())
+                .observeOn(Schedulers.io())
+                .subscribe((x) -> {
+                    System.out.println(x + " => " + Thread.currentThread().getName());
+                });
+
+        Thread.sleep(1000);
+
+        Observable.create(new Observable.OnSubscribe<Object>() {
+            @Override
+            public void call(Subscriber<? super Object> subscriber) {
+                throw new RuntimeException("ouos");
+            }
+        }).subscribe(new Observer<Object>() {
+            @Override
+            public void onCompleted() {
+
+            }
+
+            @Override
+            public void onError(Throwable e) {
+                e.printStackTrace();
+            }
+
+            @Override
+            public void onNext(Object o) {
+
+            }
+        });
     }
 
     private class WebService {

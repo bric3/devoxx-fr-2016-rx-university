@@ -8,6 +8,7 @@ import rx.schedulers.Schedulers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
@@ -161,5 +162,43 @@ public class SideEffectTest {
                     webservice.call(arg).subscribe(System.out::println);
                 });
     }
+
+    @Test
+    public void should_monad2() {
+        Observable.just(1, 2, 3)
+                .flatMap(arg -> webservice.call(arg))
+                .subscribe(System.out::println);
+    }
+
+    @Test
+    public void should_monad3() throws InterruptedException {
+        Observable.interval(1, TimeUnit.SECONDS)
+                .flatMap(tps -> Observable.just(1, 2, 3))
+                .subscribe(System.out::println);
+
+
+    }
+
+    @Test
+    public void should_monad4() throws InterruptedException {
+        Observable.interval(1, TimeUnit.SECONDS)
+                .flatMap(tps -> Observable.just(1, 2, 3))
+                .subscribe(System.out::println,
+                        Throwable::printStackTrace,
+                        () -> System.out.println("Completed !"));
+
+
+    }
+
+
+    @Test
+    public void should_not_complete() {
+        Observable.interval(1, TimeUnit.SECONDS)
+                .toList()
+                .subscribe(System.out::println);
+
+    }
+
+
 
 }

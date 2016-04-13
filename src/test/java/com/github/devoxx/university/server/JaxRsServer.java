@@ -42,6 +42,7 @@ public class JaxRsServer {
                                                         Servlets.servlet("JaxRsServlet", ServletContainer.class)
                                                                 .setLoadOnStartup(1)
                                                                 .addInitParam("javax.ws.rs.Application", appClass.getName())
+                                                                .setAsyncSupported(true)
                                                                 .addMapping("/jax-rs/*")
                                                         );
 

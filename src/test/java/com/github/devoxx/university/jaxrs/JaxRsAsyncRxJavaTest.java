@@ -1,6 +1,5 @@
 package com.github.devoxx.university.jaxrs;
 
-
 import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -12,30 +11,44 @@ import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
-import javax.ws.rs.core.Response;
+import javax.ws.rs.container.AsyncResponse;
+import javax.ws.rs.container.Suspended;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.junit.After;
 import org.junit.Test;
 import com.github.devoxx.university.server.JaxRsServer;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.Response;
+import rx.Observable;
+import rx.schedulers.Schedulers;
 
-public class JaxRsTest {
-
-    JaxRsServer jaxRsServer = new JaxRsServer().application(PlainOldJaxRsApp.class).start();
+public class JaxRsAsyncRxJavaTest {
+    JaxRsServer jaxRsServer = new JaxRsServer().application(RxJavaAsyncJaxRsApp.class).start();
     OkHttpClient okHttpClient = new OkHttpClient();
     ExecutorService executor = Executors.newFixedThreadPool(100);
-
 
     @Test
     public void do_http() throws Exception {
         Request httpQuery = new Request.Builder().url("http://localhost:8080/undertow/jax-rs/wait/20")
                                                  .build();
 
-        okhttp3.Response response = okHttpClient.newCall(httpQuery)
-                                                .execute();
+        Response response = okHttpClient.newCall(httpQuery)
+                                        .execute();
+
         assertEquals(200, response.code());
         assertEquals("Waited 20ms", response.body().string());
+    }
+
+    @Test
+    public void do_http_longer() throws Exception {
+        Request httpQuery = new Request.Builder().url("http://localhost:8080/undertow/jax-rs/wait/100")
+                                                 .build();
+
+        Response response = okHttpClient.newCall(httpQuery)
+                                        .execute();
+
+        assertEquals(503, response.code());
     }
 
     @Test
@@ -55,17 +68,30 @@ public class JaxRsTest {
     public static class WaitResource {
         @GET
         @Path("{wait_time}")
-        public Response wait(@PathParam("wait_time") int waitTime) throws InterruptedException {
+        public void wait(@Suspended final AsyncResponse response, @PathParam("wait_time") int waitTime) {
+            response.setTimeout(50, MILLISECONDS);
+            Observable.just(waitTime)
+                      .observeOn(Schedulers.computation())
+                      .map(this::longStuff)
+                      .subscribe(response::resume, response::resume);
 
-            System.out.format("heavy work of : %dms%n", waitTime);
-            MILLISECONDS.sleep(waitTime); // hard and long work
-            return Response.ok(format("Waited %dms", waitTime)).build();
         }
+
+        private String longStuff(int waitTime) {
+            try {
+                MILLISECONDS.sleep(waitTime);
+                return format("Waited %dms", waitTime);
+            } catch (InterruptedException ignored) {
+                Thread.interrupted();
+                return "got interrupted";
+            }
+        }
+
     }
 
     @ApplicationPath("/jax-rs/*")
-    private static class PlainOldJaxRsApp extends ResourceConfig {
-        public PlainOldJaxRsApp() {
+    private static class RxJavaAsyncJaxRsApp extends ResourceConfig {
+        public RxJavaAsyncJaxRsApp() {
             registerClasses(WaitResource.class);
         }
     }

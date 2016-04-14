@@ -73,7 +73,7 @@ public class RxNettyServer {
         httpServer.shutdown();
     }
 
-    private RxNettyServer registerShutdownHook() {
+    public RxNettyServer registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
@@ -91,7 +91,7 @@ public class RxNettyServer {
     private static String longStuff(int waitTime) {
         try {
             MILLISECONDS.sleep(waitTime);
-            return format("Waited %dms", waitTime);
+            return format("Worked for %dms", waitTime);
         } catch (InterruptedException ignored) {
             Thread.interrupted();
             return "got interrupted";

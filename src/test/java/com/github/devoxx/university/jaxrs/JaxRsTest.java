@@ -22,7 +22,7 @@ import okhttp3.Request;
 
 public class JaxRsTest {
 
-    JaxRsServer jaxRsServer = new JaxRsServer().application(PlainOldJaxRsApp.class).start();
+    JaxRsServer jaxRsServer = new JaxRsServer(8080).application(PlainOldJaxRsApp.class).start();
     OkHttpClient okHttpClient = new OkHttpClient();
     ExecutorService executor = Executors.newFixedThreadPool(100);
 

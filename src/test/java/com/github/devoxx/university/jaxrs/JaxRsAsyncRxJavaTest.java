@@ -24,7 +24,7 @@ import rx.Observable;
 import rx.schedulers.Schedulers;
 
 public class JaxRsAsyncRxJavaTest {
-    JaxRsServer jaxRsServer = new JaxRsServer().application(RxJavaAsyncJaxRsApp.class).start();
+    JaxRsServer jaxRsServer = new JaxRsServer(8080).application(RxJavaAsyncJaxRsApp.class).start();
     OkHttpClient okHttpClient = new OkHttpClient();
     ExecutorService executor = Executors.newFixedThreadPool(100);
 

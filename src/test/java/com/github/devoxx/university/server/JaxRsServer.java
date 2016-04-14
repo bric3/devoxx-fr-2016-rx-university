@@ -16,12 +16,16 @@ import io.undertow.servlet.api.DeploymentManager;
 public class JaxRsServer {
     private Undertow server;
     private Class<?> appClass;
+    private int port;
 
+    public JaxRsServer(int port) {
+        this.port = port;
+    }
 
     public static void main(final String[] args) {
-        new JaxRsServer().application(JaxRsApp.class)
-                         .registerShutdownHook()
-                         .start();
+        new JaxRsServer(8080).application(JaxRsApp.class)
+                             .registerShutdownHook()
+                             .start();
     }
 
     public JaxRsServer application(Class<?> appClass) {
@@ -53,7 +57,7 @@ public class JaxRsServer {
             PathHandler pathHandler = Handlers.path(Handlers.redirect("/undertow"))
                                               .addPrefixPath("/undertow", manager.start());
             server = Undertow.builder()
-                             .addHttpListener(8080, "localhost")
+                             .addHttpListener(port, "localhost")
                              .setHandler(pathHandler)
                              .build();
         } catch (ServletException e) {

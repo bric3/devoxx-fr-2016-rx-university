@@ -23,7 +23,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 public class JaxRsAsyncTest {
-    JaxRsServer jaxRsServer = new JaxRsServer().application(AsyncJaxRsApp.class).start();
+    JaxRsServer jaxRsServer = new JaxRsServer(8080).application(AsyncJaxRsApp.class).start();
     OkHttpClient okHttpClient = new OkHttpClient.Builder().retryOnConnectionFailure(false).build();
     ExecutorService executor = Executors.newFixedThreadPool(100);
 

@@ -61,14 +61,16 @@ public class RxNettyServer {
                        .build();
     }
 
-    public void startAndWait() {
+    public RxNettyServer startAndWait() {
         System.out.format("Starting Netty server on %d%n", port);
         httpServer.startAndWait();
+        return this;
     }
 
-    public void start() {
+    public RxNettyServer start() {
         System.out.format("Starting Netty server on %d%n", port);
         httpServer.start();
+        return this;
     }
 
     public void stop() throws InterruptedException {

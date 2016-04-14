@@ -64,13 +64,13 @@ public class JaxRsServer {
             throw new RuntimeException(e);
         }
 
-        System.out.println("Starting server");
+        System.out.format("Starting undertow server on %d%n", port);
         server.start();
         return this;
     }
 
     public void stop() {
-        System.out.println("Stopping server");
+        System.out.println("Stopping undertow server");
         server.stop();
     }
 
@@ -81,7 +81,7 @@ public class JaxRsServer {
         return arg;
     }
 
-    private JaxRsServer registerShutdownHook() {
+    public JaxRsServer registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {

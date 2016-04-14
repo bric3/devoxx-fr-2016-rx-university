@@ -18,6 +18,7 @@ import rx.Observable;
 public class RxNettyServer {
 
     private final HttpServer<ByteBuf, ByteBuf> httpServer;
+    private int port;
 
     public static void main(String[] args) {
         new RxNettyServer(8080).registerShutdownHook().startAndWait();
@@ -25,6 +26,7 @@ public class RxNettyServer {
     }
 
     public RxNettyServer(int port) {
+        this.port = port;
         httpServer =
                 RxNetty.newHttpServerBuilder(
                         port,
@@ -41,13 +43,14 @@ public class RxNettyServer {
                                 }
 
                                 return request.getContent()
-                                          .map(bb -> {
+                                              .map(bb -> {
                                                   String body = bb.toString(Charset.forName("UTF-8"));
                                                   return Integer.valueOf(body.substring("body=".length()));
                                               })
-                                          .map(RxNettyServer::longStuff)
-                                          .flatMap(result -> {
+                                              .map(RxNettyServer::longStuff)
+                                              .flatMap(result -> {
                                                   response.setStatus(HttpResponseStatus.OK);
+                                                  response.getHeaders().add("Content-Type", "text/plain");
                                                   response.writeString(result);
                                                   return response.close();
                                               }).ignoreElements();
@@ -59,17 +62,17 @@ public class RxNettyServer {
     }
 
     public void startAndWait() {
-        System.out.println("Starting Server");
+        System.out.format("Starting Netty server on %d%n", port);
         httpServer.startAndWait();
     }
 
     public void start() {
-        System.out.println("Starting Server");
+        System.out.format("Starting Netty server on %d%n", port);
         httpServer.start();
     }
 
     public void stop() throws InterruptedException {
-        System.out.println("Stopping server");
+        System.out.println("Stopping Netty server");
         httpServer.shutdown();
     }
 

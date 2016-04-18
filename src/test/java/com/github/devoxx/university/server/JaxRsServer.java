@@ -1,6 +1,11 @@
 package com.github.devoxx.university.server;
 
+import static java.util.stream.Collectors.toList;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EventListener;
+import java.util.Objects;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -12,10 +17,12 @@ import io.undertow.server.handlers.PathHandler;
 import io.undertow.servlet.Servlets;
 import io.undertow.servlet.api.DeploymentInfo;
 import io.undertow.servlet.api.DeploymentManager;
+import io.undertow.servlet.api.ListenerInfo;
 
 public class JaxRsServer {
     private Undertow server;
     private Class<?> appClass;
+    private Collection<Class<? extends EventListener>> listeners = new ArrayList<>();
     private int port;
 
     public JaxRsServer(int port) {
@@ -29,7 +36,7 @@ public class JaxRsServer {
     }
 
     public JaxRsServer application(Class<?> appClass) {
-        this.appClass = appClass;
+        this.appClass = Objects.requireNonNull(appClass);
         return this;
     }
 
@@ -39,6 +46,11 @@ public class JaxRsServer {
                                                 .setClassLoader(this.getClass().getClassLoader())
                                                 .setContextPath("/undertow")
                                                 .setDeploymentName("rxjava.war")
+                                                .addListeners(
+                                                        listeners.stream()
+                                                                 .map(ListenerInfo::new)
+                                                                 .collect(toList())
+                                                )
                                                 .addServlets(
                                                         Servlets.servlet("MessageServlet", MessageServlet.class)
                                                                 .addInitParam("message", "Hello World")
@@ -48,7 +60,7 @@ public class JaxRsServer {
                                                                 .addInitParam("javax.ws.rs.Application", appClass.getName())
                                                                 .setAsyncSupported(true)
                                                                 .addMapping("/jax-rs/*")
-                                                        );
+                                                );
 
         DeploymentManager manager = Servlets.defaultContainer()
                                             .addDeployment(servletBuilder);
@@ -88,6 +100,11 @@ public class JaxRsServer {
                 JaxRsServer.this.stop();
             }
         });
+        return this;
+    }
+
+    public JaxRsServer registerListener(Class<? extends EventListener> listenerClass) {
+        listeners.add(Objects.requireNonNull(listenerClass));
         return this;
     }
 

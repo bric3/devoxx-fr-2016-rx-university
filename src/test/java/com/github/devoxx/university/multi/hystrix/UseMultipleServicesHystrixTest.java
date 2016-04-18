@@ -1,4 +1,4 @@
-package com.github.devoxx.university.multi;
+package com.github.devoxx.university.multi.hystrix;
 
 import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -7,6 +7,10 @@ import java.security.SecureRandom;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import javax.servlet.ServletContextEvent;
+import javax.servlet.ServletContextListener;
+import javax.servlet.annotation.WebListener;
 import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -24,14 +28,18 @@ import org.junit.After;
 import org.junit.Test;
 import com.github.devoxx.university.server.JaxRsServer;
 import com.github.devoxx.university.server.RxNettyServer;
+import com.netflix.hystrix.Hystrix;
+import com.netflix.hystrix.HystrixCommandGroupKey;
+import com.netflix.hystrix.HystrixCommandKey;
+import com.netflix.hystrix.HystrixCommandProperties;
+import com.netflix.hystrix.HystrixObservableCommand;
 import rx.Observable;
-import rx.schedulers.Schedulers;
 
-public class UseMultipleServicesTest {
+public class UseMultipleServicesHystrixTest {
 
     JaxRsServer jaxRsServer = new JaxRsServer(8080).application(WaitApp.class).start();
     RxNettyServer rxNettyServer = new RxNettyServer(8081).start();
-    JaxRsServer composedServer = new JaxRsServer(8082).application(ComposeApp.class).start();
+    JaxRsServer composedServer = new JaxRsServer(8082).registerListener(HystrixCleanup.class).application(ComposeApp.class).start();
 
 
     @Test
@@ -57,8 +65,8 @@ public class UseMultipleServicesTest {
                                          .path("undertow/jax-rs/latest/numbers")
                                          .request()
                                          .get();
-        System.out.println(response.getStatus());
-        System.out.println(response.readEntity(String.class));
+        System.out.printf("HTTP Status : %d%n", response.getStatus());
+        System.out.printf("Response : %s%n", response.readEntity(String.class));
     }
 
     private static Response workWS(Integer workIndex) {
@@ -100,30 +108,17 @@ public class UseMultipleServicesTest {
                           .doOnNext(n -> System.out.printf("For number %d%n", n))
                           .flatMap(lastNumber -> {
                               long start = System.nanoTime();
-                              Observable<String> waitResult = Observable.fromCallable(() -> waitWS(20))
-                                                                        .subscribeOn(Schedulers.io())
-                                                                        .flatMap(r -> {
-                                                                            if (r.getStatus() != 200) {
-                                                                                return Observable.error(new MandatoryServiceUnavailable("wait", Status.SERVICE_UNAVAILABLE));
-                                                                            }
-                                                                            return Observable.just(r.readEntity(String.class));
-                                                                        })
-                                                                        .retry(2);
-                              Observable<String> workResult = Observable.fromCallable(() -> workWS(lastNumber))
-                                                                        .subscribeOn(Schedulers.io())
-                                                                        .flatMap(r -> {
-                                                                            if (r.getStatus() != 200) {
-                                                                                return Observable.error(new MandatoryServiceUnavailable("work", Status.SERVICE_UNAVAILABLE));
-                                                                            }
-                                                                            return Observable.just(r.readEntity(String.class));
-                                                                        })
-                                                                        .timeout(500, MILLISECONDS, Observable.error(new MandatoryServiceTimeout("work", Status.GATEWAY_TIMEOUT)));
+                              Observable<String> waitResult = new WaitServiceCommand(lastNumber).observe();
+                              Observable<String> workResult = new WorkServiceCommand(lastNumber).observe();
                               return Observable.zip(waitResult,
                                                     workResult,
                                                     (wait, work) -> format("=> Result : %s, %s%n=> Took : %dms", wait, work, (System.nanoTime() - start) / 1000 / 1000));
                           })
                           .subscribe(response::resume,
                                      (error) -> {
+//                                         if(error instanceof HystrixRuntimeException){
+//                                             ((HystrixRuntimeException) error).getFallbackException().getCause()
+//                                         }
                                          response.resume(Response.status(((HttpServiceException) error).proposedHttpStatus)
                                                                  .entity(error.getMessage())
                                                                  .build());
@@ -136,17 +131,83 @@ public class UseMultipleServicesTest {
                 super(format("'%s' service not available", service), proposedHttpStatus);
             }
         }
+
         private static class MandatoryServiceTimeout extends HttpServiceException {
             public MandatoryServiceTimeout(String service, Status proposedHttpStatus) {
                 super(format("'%s' service timeout", service), proposedHttpStatus);
             }
         }
+
         public static class HttpServiceException extends Exception {
             public final Status proposedHttpStatus;
+
             public HttpServiceException(String message, Status proposedHttpStatus) {
                 super(message);
                 this.proposedHttpStatus = proposedHttpStatus;
             }
+        }
+
+    }
+
+    @WebListener
+    private static class HystrixCleanup implements ServletContextListener {
+        @Override
+        public void contextInitialized(ServletContextEvent sce) {
+        }
+
+        @Override
+        public void contextDestroyed(ServletContextEvent sce) {
+            System.err.println("cleanup hystrix");
+            Hystrix.reset(1, TimeUnit.SECONDS);
+        }
+    }
+
+    private static class WaitServiceCommand extends HystrixObservableCommand<String> {
+        private int wait;
+
+        protected WaitServiceCommand(int wait) {
+            super(Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("wait group"))
+                        .andCommandKey(HystrixCommandKey.Factory.asKey("wait")));
+            this.wait = wait;
+        }
+
+        @Override
+        protected Observable<String> construct() {
+            return Observable.fromCallable(() -> waitWS(wait))
+                             .flatMap(response -> {
+                                 if(response.getStatus() == 503) {
+                                     return Observable.error(new ComposeApp.MandatoryServiceUnavailable("wait", Status.SERVICE_UNAVAILABLE));
+                                 }
+                                 return Observable.just(response.readEntity(String.class));
+                             })
+                             .retry(2);
+        }
+
+        @Override
+        protected Observable<String> resumeWithFallback() {
+            return Observable.just("Waited too long");
+        }
+    }
+
+    private static class WorkServiceCommand extends HystrixObservableCommand<String> {
+        private int work;
+
+        protected WorkServiceCommand(int work) {
+            super(Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("work group"))
+                        .andCommandKey(HystrixCommandKey.Factory.asKey("work"))
+                        .andCommandPropertiesDefaults(HystrixCommandProperties.Setter().withExecutionTimeoutInMilliseconds(500)));
+            this.work = work;
+        }
+
+        @Override
+        protected Observable<String> construct() {
+            return Observable.fromCallable(() -> workWS(work))
+                             .map(response -> response.readEntity(String.class));
+        }
+
+        @Override
+        protected Observable<String> resumeWithFallback() {
+            return Observable.just("Worked too long");
         }
     }
 
@@ -182,4 +243,6 @@ public class UseMultipleServicesTest {
             }
         }
     }
+
+
 }
